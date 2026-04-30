@@ -1,0 +1,7 @@
+# file name : requirements.txt
+# Core backend
+Flask>=3.0.0
+Flask-Cors>=4.0.0
+
+# Existing cryptography prototype support
+charm-crypto
