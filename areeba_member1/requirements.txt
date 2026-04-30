@@ -1,7 +1,10 @@
+<<<<<<< HEAD
 # file name : requirements.txt
 # Core backend
 Flask>=3.0.0
 Flask-Cors>=4.0.0
 
 # Existing cryptography prototype support
+=======
+>>>>>>> 8562e32eecf0e222a9024a7f667a977b7b12262a
 charm-crypto

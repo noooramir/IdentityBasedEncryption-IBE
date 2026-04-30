@@ -1,5 +1,8 @@
 """
+<<<<<<< HEAD
 # file name : ibe_core.py
+=======
+>>>>>>> 8562e32eecf0e222a9024a7f667a977b7b12262a
 Boneh-Franklin style IBE (teaching prototype) built with Charm-Crypto.
 
 This module covers Member 1 responsibilities:

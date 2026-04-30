@@ -1,8 +1,13 @@
 # Python cache
 __pycache__/
+*/__pycache__/
 *.py[cod]
 
 # Virtual environments
+.venv/
+*/.venv/
 venv/
 env/
-.venv/
+
+# OS junk
+.DS_Store

@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 # file name : member1_report_pack.md
+=======
+>>>>>>> 8562e32eecf0e222a9024a7f667a977b7b12262a
 # Member 1 Report Pack (Areeba)
 
 ## 1) Cryptographic Core: Boneh-Franklin Identity-Based Encryption
