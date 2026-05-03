@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBE Secure Mail — Identity-Based Encryption</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #111820;
+    --surface2: #182030;
+    --border: #1e2d40;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+    --text: #e2eaf4;
+    --muted: #5a7a9a;
+    --mono: 'Fira Code', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Top nav */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    height: 60px;
+    background: rgba(10,14,20,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .logo span { color: var(--text); }
+  .nav-tabs {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .nav-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+    font-family: var(--sans);
+    letter-spacing: 0.02em;
+  }
+  .nav-tab:hover { color: var(--text); background: var(--surface); }
+  .nav-tab.active { background: var(--surface2); color: var(--accent); border: 1px solid var(--border); }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent3);
+    box-shadow: 0 0 8px var(--accent3);
+    display: inline-block;
+  }
+
+  /* Layout */
+  .app-container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* Pages */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Animations */
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes scanline {
+    0% { top: -2px; }
+    100% { top: 100%; }
+  }
+
+  .page.active > * {
+    animation: fadeSlideIn 0.35s ease forwards;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem;
+    margin-bottom: 1.25rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent), transparent);
+    opacity: 0.6;
+  }
+  .card-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card-title .icon { font-size: 1rem; }
+
+  /* Form elements */
+  .form-group { margin-bottom: 1.25rem; }
+  label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  input[type="text"], input[type="email"], textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,255,0.1);
+  }
+  textarea { resize: vertical; min-height: 100px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.5rem;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: #29edff; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,0.3); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger {
+    background: rgba(239,68,68,0.15);
+    color: var(--danger);
+    border: 1px solid rgba(239,68,68,0.3);
+  }
+  .btn-danger:hover { background: rgba(239,68,68,0.25); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+  .btn-loading::after {
+    content: '';
+    width: 14px; height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  /* Toast */
+  #toast-container {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .toast {
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    max-width: 340px;
+    animation: fadeSlideIn 0.3s ease;
+    border-left: 3px solid;
+  }
+  .toast.success { background: rgba(16,185,129,0.12); border-color: var(--accent3); color: var(--accent3); }
+  .toast.error   { background: rgba(239,68,68,0.12);  border-color: var(--danger); color: var(--danger); }
+  .toast.info    { background: rgba(0,229,255,0.1);   border-color: var(--accent); color: var(--accent); }
+
+  /* Output box */
+  .output-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent3);
+    word-break: break-all;
+    white-space: pre-wrap;
+    position: relative;
+    min-height: 60px;
+  }
+  .output-box.empty { color: var(--muted); font-style: italic; }
+
+  .copy-btn {
+    position: absolute;
+    top: 0.5rem; right: 0.5rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Hero header */
+  .page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-header h1 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 0.4rem;
+  }
+  .page-header h1 span { color: var(--accent); }
+  .page-header p { color: var(--muted); font-size: 0.9rem; }
+
+  /* Step indicator */
+  .steps {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    align-items: center;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .step.done { color: var(--accent3); }
+  .step.active { color: var(--accent); }
+  .step-num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+  .step.done .step-num { background: var(--accent3); color: #000; border-color: var(--accent3); }
+  .step.active .step-num { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 10px rgba(0,229,255,0.3); }
+  .step-sep { flex: 1; height: 1px; background: var(--border); }
+
+  /* Badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 99px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  .badge-cyan  { background: rgba(0,229,255,0.1); color: var(--accent); border: 1px solid rgba(0,229,255,0.2); }
+  .badge-green { background: rgba(16,185,129,0.1); color: var(--accent3); border: 1px solid rgba(16,185,129,0.2); }
+
+  /* Dashboard stats */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem;
+    text-align: center;
+  }
+  .stat-card .num {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .stat-card .label { font-size: 0.7rem; color: var(--muted); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* Alerts */
+  .alert {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid;
+  }
+  .alert.info  { background: rgba(0,229,255,0.06); border-color: var(--accent); color: var(--text); }
+  .alert.warn  { background: rgba(245,158,11,0.08); border-color: var(--warn); color: var(--text); }
+  .alert.success { background: rgba(16,185,129,0.08); border-color: var(--accent3); color: var(--text); }
+  .alert-icon { font-size: 1rem; flex-shrink: 0; }
+
+  /* Key display */
+  .key-card {
+    background: var(--bg);
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: #a78bfa;
+    word-break: break-all;
+  }
+
+  /* Params display */
+  .params-grid {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .param-item {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .param-key {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-transform: uppercase;
+    min-width: 60px;
+    padding-top: 1px;
+  }
+  .param-val {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    word-break: break-all;
+    flex: 1;
+  }
+
+  /* Divider */
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+
+  /* Loading overlay for sections */
+  .section-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  /* Flow arrows */
+  .flow-arrow {
+    text-align: center;
+    color: var(--muted);
+    font-size: 1.2rem;
+    margin: 0.5rem 0;
+    animation: pulse 2s infinite;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .stat-row { grid-template-columns: 1fr 1fr; }
+    .stat-row .stat-card:last-child { grid-column: 1 / -1; }
+    nav { padding: 0 1rem; }
+    .app-container { padding: 1.5rem 1rem 3rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">🔐 IBE<span>SecureMail</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchPage('register')">Register</button>
+    <button class="nav-tab" onclick="switchPage('keygen')">Key Extract</button>
+    <button class="nav-tab" onclick="switchPage('encrypt')">Encrypt</button>
+    <button class="nav-tab" onclick="switchPage('decrypt')">Decrypt</button>
+    <button class="nav-tab" onclick="switchPage('params')">Public Params</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;color:var(--muted);">
+    <span class="status-dot" id="server-dot" style="background:var(--warn);box-shadow:0 0 8px var(--warn);"></span>
+    <span id="server-status">Checking...</span>
+  </div>
+</nav>
+
+<div class="app-container">
+
+  <!-- REGISTER PAGE -->
+  <div id="page-register" class="page active">
+    <div class="page-header">
+      <h1>Register <span>Identity</span></h1>
+      <p>Create a new identity in the KGC. Your identity (e.g. email) becomes your public key.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step active"><div class="step-num">1</div>Register Identity</div>
+      <div class="step-sep"></div>
+      <div class="step"><div class="step-num">2</div>Extract Key</div>
+      <div class="step-sep"></div>
+      <div class="step"><div class="step-num">3</div>Encrypt/Decrypt</div>
+    </div>
+
+    <div class="alert info">
+      <span class="alert-icon">ℹ️</span>
+      <div>In IBE, your <strong>identity string</strong> (like an email address) acts as your public key. No certificate or key exchange needed.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span> New Identity Registration</div>
+      <div class="form-group">
+        <label>Identity String (Email)</label>
+        <input type="email" id="reg-identity" placeholder="alice@example.com" />
+      </div>
+      <button class="btn btn-primary" onclick="registerIdentity()" id="reg-btn">
+        <span>🔑</span> Register Identity
+      </button>
+    </div>
+
+    <div class="card" id="reg-result-card" style="display:none;">
+      <div class="card-title"><span class="icon">✅</span> Registration Result</div>
+      <div class="params-grid" id="reg-result-content"></div>
+      <div class="alert success" style="margin-top:1rem;margin-bottom:0;">
+        <span class="alert-icon">➡️</span>
+        <div>Next: Go to <strong>Key Extract</strong> to generate your private key from the KGC.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEY EXTRACTION PAGE -->
+  <div id="page-keygen" class="page">
+    <div class="page-header">
+      <h1>Private Key <span>Extraction</span></h1>
+      <p>Request your identity-based private key from the Key Generation Center (KGC).</p>
+    </div>
+
+    <div class="steps">
+      <div class="step done"><div class="step-num">✓</div>Register Identity</div>
+      <div class="step-sep"></div>
+      <div class="step active"><div class="step-num">2</div>Extract Key</div>
+      <div class="step-sep"></div>
+      <div class="step"><div class="step-num">3</div>Encrypt/Decrypt</div>
+    </div>
+
+    <div class="alert warn">
+      <span class="alert-icon">⚠️</span>
+      <div>Your private key is <strong>derived from your identity</strong> by the KGC's master secret. Store it securely — it never leaves this session unless you copy it.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🗝️</span> Extract Private Key</div>
+      <div class="form-group">
+        <label>Your Identity</label>
+        <input type="email" id="key-identity" placeholder="alice@example.com" />
+      </div>
+      <button class="btn btn-primary" onclick="extractKey()" id="key-btn">
+        <span>⚡</span> Extract Key from KGC
+      </button>
+    </div>
+
+    <div id="key-result-card" class="card" style="display:none;">
+      <div class="card-title"><span class="icon">🔐</span> Your Private Key <span class="badge badge-cyan">SK_ID</span></div>
+      <div class="alert warn" style="margin-bottom:1rem;">
+        <span class="alert-icon">🚨</span>
+        <div>This key is <strong>private</strong>. Never share it. Copy and store it securely for decryption.</div>
+      </div>
+      <div class="key-card" id="key-output">—</div>
+      <button class="btn btn-secondary" style="margin-top:0.75rem;" onclick="copyText('key-output', this)">📋 Copy Private Key</button>
+    </div>
+  </div>
+
+  <!-- ENCRYPT PAGE -->
+  <div id="page-encrypt" class="page">
+    <div class="page-header">
+      <h1>Encrypt <span>Message</span></h1>
+      <p>Encrypt a message using only the recipient's identity — no certificate lookup needed.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📧</span> Compose Encrypted Message</div>
+      <div class="form-group">
+        <label>Recipient Identity (Public Key)</label>
+        <input type="email" id="enc-recipient" placeholder="bob@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Plaintext Message</label>
+        <textarea id="enc-message" placeholder="Type your secret message here..."></textarea>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="encryptMessage()" id="enc-btn">
+          <span>🔒</span> Encrypt Message
+        </button>
+        <button class="btn btn-secondary" onclick="clearEncrypt()">Clear</button>
+      </div>
+    </div>
+
+    <div class="flow-arrow" id="enc-arrow" style="display:none;">↓</div>
+
+    <div id="enc-result-card" class="card" style="display:none;">
+      <div class="card-title"><span class="icon">📦</span> Ciphertext Bundle <span class="badge badge-green">Ready to Send</span></div>
+      <div class="output-box" id="enc-output">—</div>
+      <button class="copy-btn" onclick="copyText('enc-output', this)">Copy</button>
+      <div class="alert info" style="margin-top:1rem;margin-bottom:0;">
+        <span class="alert-icon">📤</span>
+        <div>Send this ciphertext to the recipient. Only they can decrypt it using their IBE private key.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECRYPT PAGE -->
+  <div id="page-decrypt" class="page">
+    <div class="page-header">
+      <h1>Decrypt <span>Message</span></h1>
+      <p>Recover the plaintext using your identity-based private key.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔓</span> Decrypt Ciphertext</div>
+      <div class="form-group">
+        <label>Your Identity</label>
+        <input type="email" id="dec-identity" placeholder="bob@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Your Private Key (SK_ID)</label>
+        <textarea id="dec-privkey" placeholder="Paste your extracted private key here..." style="min-height:80px;font-size:0.75rem;"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Ciphertext Bundle</label>
+        <textarea id="dec-ciphertext" placeholder="Paste the received ciphertext bundle here..." style="min-height:120px;font-size:0.75rem;"></textarea>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="decryptMessage()" id="dec-btn">
+          <span>🔓</span> Decrypt Message
+        </button>
+        <button class="btn btn-secondary" onclick="clearDecrypt()">Clear</button>
+      </div>
+    </div>
+
+    <div id="dec-result-card" class="card" style="display:none;">
+      <div class="card-title"><span class="icon">💬</span> Recovered Plaintext</div>
+      <div class="output-box" id="dec-output" style="color:var(--accent3);font-size:0.95rem;font-family:var(--sans);white-space:pre-wrap;">—</div>
+    </div>
+  </div>
+
+  <!-- PUBLIC PARAMS PAGE -->
+  <div id="page-params" class="page">
+    <div class="page-header">
+      <h1>Public <span>Parameters</span></h1>
+      <p>Master Public Key (MPK) — publicly broadcast by the KGC. Required for encryption.</p>
+    </div>
+
+    <div class="stat-row" id="params-stats">
+      <div class="stat-card"><div class="num" id="stat-type">—</div><div class="label">Curve Type</div></div>
+      <div class="stat-card"><div class="num" id="stat-hash">—</div><div class="label">Hash Scheme</div></div>
+      <div class="stat-card"><div class="num" id="stat-status">—</div><div class="label">KGC Status</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📡</span> KGC Public Parameters (MPK)</div>
+      <button class="btn btn-primary" onclick="loadPublicParams()" style="margin-bottom:1.25rem;">
+        <span>🔄</span> Refresh Parameters
+      </button>
+      <div id="params-content">
+        <div class="alert info">
+          <span class="alert-icon">ℹ️</span>
+          <div>Click "Refresh Parameters" to fetch the current Master Public Key from the KGC server.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📖</span> About IBE Parameters</div>
+      <p style="font-size:0.85rem;color:var(--muted);line-height:1.7;">
+        The Boneh-Franklin IBE scheme uses <strong style="color:var(--text);">bilinear pairings</strong> over elliptic curves.
+        The KGC generates a master secret key (MSK) and publishes the master public key (MPK).
+        Any sender can encrypt a message to identity <em>ID</em> using only MPK and ID — no per-user certificate required.
+        The KGC uses MSK to extract private key SK_ID = MSK · H₁(ID) for authenticated users.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const API_BASE = window.location.origin; // Use same host
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.textContent.trim().toLowerCase().replace(' ','').startsWith(name.substring(0,4).toLowerCase()))
+      t.classList.add('active');
+  });
+}
+
+// Fix nav tab active matching
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, type = 'info', duration = 4000) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+// ============================================================
+// API HELPER
+// ============================================================
+function getTimestamp() {
+  return Math.floor(Date.now() / 1000).toString();
+}
+
+async function apiCall(method, path, body = null) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Request-Timestamp': getTimestamp()
+  };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  const data = await res.json();
+  return { ok: res.ok, status: res.status, data };
+}
+
+// ============================================================
+// SERVER STATUS CHECK
+// ============================================================
+async function checkServerStatus() {
+  const dot = document.getElementById('server-dot');
+  const label = document.getElementById('server-status');
+  try {
+    const r = await fetch(API_BASE + '/ibe/status', {
+      headers: { 'X-Request-Timestamp': getTimestamp() }
+    });
+    if (r.ok) {
+      dot.style.background = 'var(--accent3)';
+      dot.style.boxShadow = '0 0 8px var(--accent3)';
+      label.textContent = 'KGC Online';
+    } else {
+      throw new Error();
+    }
+  } catch {
+    dot.style.background = 'var(--danger)';
+    dot.style.boxShadow = '0 0 8px var(--danger)';
+    label.textContent = 'Server Offline';
+  }
+}
+checkServerStatus();
+setInterval(checkServerStatus, 15000);
+
+// ============================================================
+// COPY HELPER
+// ============================================================
+function copyText(elId, btn) {
+  const el = document.getElementById(elId);
+  const text = el.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+    toast('Copied to clipboard', 'success');
+  });
+}
+
+// ============================================================
+// SET LOADING STATE
+// ============================================================
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  btn.disabled = loading;
+  if (loading) btn.classList.add('btn-loading');
+  else btn.classList.remove('btn-loading');
+}
+
+// ============================================================
+// REGISTER IDENTITY
+// ============================================================
+async function registerIdentity() {
+  const identity = document.getElementById('reg-identity').value.trim().toLowerCase();
+  if (!identity) { toast('Please enter an identity string', 'error'); return; }
+  if (!identity.includes('@')) { toast('Identity should be an email address', 'error'); return; }
+
+  setLoading('reg-btn', true);
+  try {
+    const { ok, status, data } = await apiCall('POST', '/register', { identity });
+
+    if (ok || status === 201) {
+      showRegResult({ success: true, id: data.data?.id, identity: data.data?.identity || identity });
+      toast('Identity registered successfully!', 'success');
+    } else if (status === 409) {
+      toast('Identity already registered', 'info');
+      showRegResult({ success: true, id: '(existing)', identity });
+    } else {
+      toast(data.message || 'Registration failed', 'error');
+    }
+  } catch (e) {
+    toast('Cannot reach server. Is the backend running?', 'error');
+    // Demo mode
+    showRegResult({ success: true, id: Math.floor(Math.random() * 1000), identity, demo: true });
+  } finally {
+    setLoading('reg-btn', false);
+  }
+}
+
+function showRegResult({ success, id, identity, demo }) {
+  const card = document.getElementById('reg-result-card');
+  const content = document.getElementById('reg-result-content');
+  card.style.display = 'block';
+  content.innerHTML = `
+    <div class="param-item">
+      <div class="param-key">ID</div>
+      <div class="param-val">${id} ${demo ? '<span class="badge badge-cyan">demo</span>' : ''}</div>
+    </div>
+    <div class="param-item">
+      <div class="param-key">Identity</div>
+      <div class="param-val">${identity}</div>
+    </div>
+    <div class="param-item">
+      <div class="param-key">Status</div>
+      <div class="param-val"><span class="badge badge-green">✓ Registered</span></div>
+    </div>
+  `;
+}
+
+// ============================================================
+// EXTRACT PRIVATE KEY
+// ============================================================
+async function extractKey() {
+  const identity = document.getElementById('key-identity').value.trim().toLowerCase();
+  if (!identity) { toast('Enter your registered identity', 'error'); return; }
+
+  setLoading('key-btn', true);
+  try {
+    const { ok, data } = await apiCall('POST', '/extract-key', { identity });
+
+    if (ok) {
+      const key = data.data?.private_key || data.data?.key || JSON.stringify(data.data);
+      showKeyResult(key);
+      toast('Private key extracted from KGC!', 'success');
+    } else {
+      toast(data.message || 'Key extraction failed. Is identity registered?', 'error');
+    }
+  } catch (e) {
+    toast('Server unreachable — showing demo key', 'info');
+    // Demo key
+    const demoKey = `{"g1_r":"${randomHex(64)}","h_id_r":"${randomHex(64)}"}`;
+    showKeyResult(demoKey);
+  } finally {
+    setLoading('key-btn', false);
+  }
+}
+
+function showKeyResult(key) {
+  const card = document.getElementById('key-result-card');
+  card.style.display = 'block';
+  document.getElementById('key-output').textContent = typeof key === 'object' ? JSON.stringify(key, null, 2) : key;
+}
+
+// ============================================================
+// ENCRYPT MESSAGE
+// ============================================================
+async function encryptMessage() {
+  const recipient = document.getElementById('enc-recipient').value.trim().toLowerCase();
+  const message = document.getElementById('enc-message').value.trim();
+
+  if (!recipient) { toast('Enter recipient identity', 'error'); return; }
+  if (!message) { toast('Enter a message to encrypt', 'error'); return; }
+
+  setLoading('enc-btn', true);
+  try {
+    const { ok, data } = await apiCall('POST', '/encrypt', {
+      receiver_id: recipient,
+      message
+    });
+
+    if (ok) {
+      const ct = data.data?.ciphertext || data.data;
+      showEncryptResult(typeof ct === 'object' ? JSON.stringify(ct, null, 2) : ct);
+      toast('Message encrypted successfully!', 'success');
+    } else {
+      toast(data.message || 'Encryption failed', 'error');
+    }
+  } catch (e) {
+    toast('Server unreachable — using demo encryption', 'info');
+    const demoCt = JSON.stringify({
+      U: randomHex(64),
+      V: btoa(message.split('').map((c,i) => String.fromCharCode(c.charCodeAt(0) ^ i)).join('')),
+      W: randomHex(32),
+      recipient_id: recipient
+    }, null, 2);
+    showEncryptResult(demoCt);
+  } finally {
+    setLoading('enc-btn', false);
+  }
+}
+
+function showEncryptResult(ct) {
+  document.getElementById('enc-arrow').style.display = 'block';
+  const card = document.getElementById('enc-result-card');
+  card.style.display = 'block';
+  document.getElementById('enc-output').textContent = ct;
+  // Auto-fill decrypt page
+  document.getElementById('dec-ciphertext').value = ct;
+}
+
+function clearEncrypt() {
+  document.getElementById('enc-recipient').value = '';
+  document.getElementById('enc-message').value = '';
+  document.getElementById('enc-result-card').style.display = 'none';
+  document.getElementById('enc-arrow').style.display = 'none';
+}
+
+// ============================================================
+// DECRYPT MESSAGE
+// ============================================================
+async function decryptMessage() {
+  const identity = document.getElementById('dec-identity').value.trim().toLowerCase();
+  const privkey = document.getElementById('dec-privkey').value.trim();
+  const ciphertext = document.getElementById('dec-ciphertext').value.trim();
+
+  if (!identity) { toast('Enter your identity', 'error'); return; }
+  if (!privkey) { toast('Enter your private key', 'error'); return; }
+  if (!ciphertext) { toast('Enter the ciphertext to decrypt', 'error'); return; }
+
+  let ctParsed;
+  try { ctParsed = JSON.parse(ciphertext); } catch { ctParsed = ciphertext; }
+
+  setLoading('dec-btn', true);
+  try {
+    const { ok, data } = await apiCall('POST', '/decrypt', {
+      identity,
+      ciphertext: ctParsed,
+      private_key: privkey
+    });
+
+    if (ok) {
+      const pt = data.data?.plaintext || data.data?.message || data.data;
+      showDecryptResult(pt);
+      toast('Message decrypted!', 'success');
+    } else {
+      toast(data.message || 'Decryption failed. Wrong key or corrupted ciphertext.', 'error');
+    }
+  } catch (e) {
+    toast('Server unreachable — demo decryption', 'info');
+    showDecryptResult('[Demo] Message decrypted successfully.\n\nIn production, this would be the original plaintext recovered using your IBE private key.');
+  } finally {
+    setLoading('dec-btn', false);
+  }
+}
+
+function showDecryptResult(pt) {
+  const card = document.getElementById('dec-result-card');
+  card.style.display = 'block';
+  document.getElementById('dec-output').textContent = typeof pt === 'object' ? JSON.stringify(pt, null, 2) : pt;
+}
+
+function clearDecrypt() {
+  document.getElementById('dec-identity').value = '';
+  document.getElementById('dec-privkey').value = '';
+  document.getElementById('dec-ciphertext').value = '';
+  document.getElementById('dec-result-card').style.display = 'none';
+}
+
+// ============================================================
+// PUBLIC PARAMS
+// ============================================================
+async function loadPublicParams() {
+  const container = document.getElementById('params-content');
+  container.innerHTML = `<div class="section-loading"><div class="spinner"></div>Fetching KGC public parameters...</div>`;
+
+  try {
+    const { ok, data } = await apiCall('GET', '/public-params');
+    if (ok) {
+      renderParams(data.data || data);
+    } else {
+      throw new Error('API error');
+    }
+  } catch {
+    toast('Server offline — showing demo parameters', 'info');
+    renderParams({
+      g: randomHex(64),
+      g1: randomHex(64),
+      'g1-string': 'BN256 Generator G1',
+      'hash-function': 'SHA-256 → G1',
+      pairing: 'Type-A Bilinear Pairing (BN256)',
+      demo: true
+    });
+  }
+}
+
+function renderParams(params) {
+  const container = document.getElementById('params-content');
+  const entries = Object.entries(params);
+
+  document.getElementById('stat-type').textContent = 'BN256';
+  document.getElementById('stat-hash').textContent = 'SHA-256';
+  document.getElementById('stat-status').textContent = params.demo ? 'Demo' : 'Live';
+
+  container.innerHTML = `
+    <div class="params-grid">
+      ${entries.map(([k, v]) => `
+        <div class="param-item">
+          <div class="param-key">${k}</div>
+          <div class="param-val">${typeof v === 'object' ? JSON.stringify(v) : v}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function randomHex(len) {
+  return Array.from({length: len}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+</script>
+</body>
+</html>

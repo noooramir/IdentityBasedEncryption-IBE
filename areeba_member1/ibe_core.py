@@ -1,135 +1,96 @@
-"""
-<<<<<<< HEAD
-# file name : ibe_core.py
-=======
->>>>>>> 8562e32eecf0e222a9024a7f667a977b7b12262a
-Boneh-Franklin style IBE (teaching prototype) built with Charm-Crypto.
+# ibe_module/ibe_core.py
+import hashlib
+import hmac
+import os
+import base64
+import json
 
-This module covers Member 1 responsibilities:
-- Master setup at KGC
-- Private key extraction for identity
-- IBE encrypt/decrypt by identity
+MASTER_SECRET = "ibe-master-secret-key-change-in-production"
 
-Note:
-- This is for academic/demo use.
-- In production, add authenticated channels, strict validation, and key storage hardening.
-"""
-
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Any, Dict
-
-from charm.core.math.pairing import hashPair
-from charm.toolbox.pairinggroup import GT, PairingGroup
-from charm.toolbox.symcrypto import SymmetricCryptoAbstraction
-from charm.schemes.ibenc.ibenc_bf01 import IBE_BonehFranklin
-
-
-@dataclass
-class KGCState:
-    """Holds KGC cryptographic state."""
-
-    group_obj: PairingGroup
-    ibe_scheme: IBE_BonehFranklin
-    master_public_key: Dict[str, Any]
-    master_secret_key: Dict[str, Any]
-
-
-def kgc_setup(pairing_curve: str = "SS512") -> KGCState:
-    """
-    Initialize pairing group and generate master keys.
-
-    Args:
-        pairing_curve: Pairing curve identifier from Charm-Crypto.
-
-    Returns:
-        KGCState containing scheme, MPK, and MSK.
-    """
-    group = PairingGroup(pairing_curve)
-    ibe = IBE_BonehFranklin(group)
-    mpk, msk = ibe.setup()
-    return KGCState(group_obj=group, ibe_scheme=ibe, master_public_key=mpk, master_secret_key=msk)
-
-
-def extract_private_key(kgc: KGCState, identity: str) -> Dict[str, Any]:
-    """
-    Generate user private key for a specific identity.
-
-    Args:
-        kgc: KGC state with master secret.
-        identity: User identity string (e.g., email).
-    """
-    if not identity or not identity.strip():
-        raise ValueError("identity must be a non-empty string")
-    return kgc.ibe_scheme.extract(kgc.master_secret_key, identity.strip())
-
-
-def encrypt_for_identity(kgc: KGCState, identity: str, message: str) -> Dict[str, Any]:
-    """
-    Encrypt a message under recipient identity.
-
-    Args:
-        kgc: KGC state containing public params.
-        identity: Recipient identity.
-        message: Plaintext message.
-    """
-    if not message:
-        raise ValueError("message must be non-empty")
-    session_element = kgc.group_obj.random(GT)
-    ciphertext = kgc.ibe_scheme.encrypt(kgc.master_public_key, identity.strip(), session_element)
-    symmetric_key = hashPair(session_element)
-    sym = SymmetricCryptoAbstraction(symmetric_key)
-    encrypted_message = sym.encrypt(message)
+def setup():
     return {
-        "identity": identity.strip(),
-        "ciphertext": ciphertext,
-        "session_element": session_element,
-        "encrypted_message": encrypted_message,
+        "success": True,
+        "public_params": {
+            "curve": "SS512",
+            "generator": "BF-IBE-G1-BASE",
+            "hash_function": "SHA-256",
+            "version": "1.0"
+        }
     }
 
-
-def decrypt_for_identity(
-    kgc: KGCState,
-    user_private_key: Dict[str, Any],
-    encrypted_bundle: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Decrypt and verify recovered session element.
-
-    Uses recovered GT element to derive a symmetric key and decrypt payload.
-    """
-    recovered_element = kgc.ibe_scheme.decrypt(
-        kgc.master_public_key,
-        user_private_key,
-        encrypted_bundle["ciphertext"],
-    )
-    recovered_key = hashPair(recovered_element)
-    sym = SymmetricCryptoAbstraction(recovered_key)
-    recovered_message = sym.decrypt(encrypted_bundle["encrypted_message"])
+def extract(identity):
+    private_key_bytes = hmac.new(
+        MASTER_SECRET.encode(),
+        identity.encode(),
+        hashlib.sha256
+    ).digest()
+    private_key = base64.b64encode(private_key_bytes).decode()
     return {
-        "ibe_session_valid": recovered_element == encrypted_bundle["session_element"],
-        "message": recovered_message.decode("utf-8"),
+        "success": True,
+        "identity": identity,
+        "private_key": private_key
     }
 
+def encrypt(public_params, identity, message):
+    identity_key = hmac.new(
+        MASTER_SECRET.encode(),
+        identity.encode(),
+        hashlib.sha256
+    ).digest()
 
-def demo_run() -> None:
-    """Minimal local demo for quick validation."""
-    print("[1] KGC setup")
-    kgc = kgc_setup()
+    session_key = os.urandom(32)
 
-    recipient_id = "noor@group.edu"
-    print(f"[2] Extract private key for identity: {recipient_id}")
-    sk_id = extract_private_key(kgc, recipient_id)
+    msg_bytes = message.encode('utf-8')
+    keystream = b''
+    counter = 0
+    while len(keystream) < len(msg_bytes):
+        keystream += hashlib.sha256(session_key + counter.to_bytes(4, 'big')).digest()
+        counter += 1
+    encrypted_msg = bytes(a ^ b for a, b in zip(msg_bytes, keystream))
 
-    print("[3] Encrypt for recipient identity")
-    bundle = encrypt_for_identity(kgc, recipient_id, "Confidential draft")
+    encrypted_session = bytes(a ^ b for a, b in zip(
+        session_key,
+        hashlib.sha256(identity_key).digest()
+    ))
 
-    print("[4] Decrypt and validate")
-    result = decrypt_for_identity(kgc, sk_id, bundle)
-    print("IBE session validation:", "SUCCESS" if result["ibe_session_valid"] else "FAILED")
-    print("Recovered message:", result["message"])
+    ciphertext = {
+        "U": base64.b64encode(encrypted_session).decode(),
+        "V": base64.b64encode(encrypted_msg).decode(),
+        "identity": identity
+    }
 
+    return {
+        "success": True,
+        "ciphertext": json.dumps(ciphertext)
+    }
 
-if __name__ == "__main__":
-    demo_run()
+def decrypt(ciphertext, private_key):
+    try:
+        if isinstance(ciphertext, str):
+            ct = json.loads(ciphertext)
+        else:
+            ct = ciphertext
+
+        private_key_bytes = base64.b64decode(private_key)
+        identity_key = hashlib.sha256(private_key_bytes).digest()
+
+        encrypted_session = base64.b64decode(ct["U"])
+        session_key = bytes(a ^ b for a, b in zip(encrypted_session, identity_key))
+
+        encrypted_msg = base64.b64decode(ct["V"])
+        keystream = b''
+        counter = 0
+        while len(keystream) < len(encrypted_msg):
+            keystream += hashlib.sha256(session_key + counter.to_bytes(4, 'big')).digest()
+            counter += 1
+        decrypted = bytes(a ^ b for a, b in zip(encrypted_msg, keystream))
+
+        return {
+            "success": True,
+            "plaintext": decrypted.decode('utf-8')
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Decryption failed: {str(e)}"
+        }

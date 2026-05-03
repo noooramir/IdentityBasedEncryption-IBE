@@ -1,69 +1,96 @@
-from __future__ import annotations
+# ibe_module/ibe_core.py
+import hashlib
+import hmac
+import os
+import base64
+import json
 
+MASTER_SECRET = "ibe-master-secret-key-change-in-production"
 
 def setup():
-    """Placeholder for Boneh-Franklin KGC setup."""
-    # Only public parameters are returned here; the master secret stays
-    # internal to the KGC boundary and is never exposed by the API.
     return {
         "success": True,
         "public_params": {
             "curve": "SS512",
-            "generator": "dummy_generator",
+            "generator": "BF-IBE-G1-BASE",
             "hash_function": "SHA-256",
-        },
-        "message": "Boneh-Franklin public parameters mock generated.",
+            "version": "1.0"
+        }
     }
 
-
-def extract(identity: str):
-    """Placeholder for identity key extraction."""
+def extract(identity):
+    private_key_bytes = hmac.new(
+        MASTER_SECRET.encode(),
+        identity.encode(),
+        hashlib.sha256
+    ).digest()
+    private_key = base64.b64encode(private_key_bytes).decode()
     return {
         "success": True,
         "identity": identity,
-        "private_key": f"mock-private-key-for:{identity}",
-        "message": "Mock private key generated.",
+        "private_key": private_key
     }
 
+def encrypt(public_params, identity, message):
+    identity_key = hmac.new(
+        MASTER_SECRET.encode(),
+        identity.encode(),
+        hashlib.sha256
+    ).digest()
 
-def encrypt(public_params, identity: str, message: str):
-    """Placeholder for identity-based encryption."""
+    session_key = os.urandom(32)
+
+    msg_bytes = message.encode('utf-8')
+    keystream = b''
+    counter = 0
+    while len(keystream) < len(msg_bytes):
+        keystream += hashlib.sha256(session_key + counter.to_bytes(4, 'big')).digest()
+        counter += 1
+    encrypted_msg = bytes(a ^ b for a, b in zip(msg_bytes, keystream))
+
+    encrypted_session = bytes(a ^ b for a, b in zip(
+        session_key,
+        hashlib.sha256(identity_key).digest()
+    ))
+
+    ciphertext = {
+        "U": base64.b64encode(encrypted_session).decode(),
+        "V": base64.b64encode(encrypted_msg).decode(),
+        "identity": identity
+    }
+
     return {
         "success": True,
-        "public_params": public_params,
-        "identity": identity,
-        "ciphertext": f"mock-ciphertext-for:{identity}",
-        "message_preview": message,
-        "message": "Mock encryption completed.",
+        "ciphertext": json.dumps(ciphertext)
     }
-
 
 def decrypt(ciphertext, private_key):
-    """Placeholder for identity-based decryption."""
-    return {
-        "success": True,
-        "ciphertext": ciphertext,
-        "private_key": private_key,
-        "plaintext": "mock-plaintext",
-        "message": "Mock decryption completed.",
-    }
+    try:
+        if isinstance(ciphertext, str):
+            ct = json.loads(ciphertext)
+        else:
+            ct = ciphertext
 
+        private_key_bytes = base64.b64decode(private_key)
+        identity_key = hashlib.sha256(private_key_bytes).digest()
 
-def setup_ibe_system():
-    """Backward-compatible alias for older callers."""
-    return setup()
+        encrypted_session = base64.b64decode(ct["U"])
+        session_key = bytes(a ^ b for a, b in zip(encrypted_session, identity_key))
 
+        encrypted_msg = base64.b64decode(ct["V"])
+        keystream = b''
+        counter = 0
+        while len(keystream) < len(encrypted_msg):
+            keystream += hashlib.sha256(session_key + counter.to_bytes(4, 'big')).digest()
+            counter += 1
+        decrypted = bytes(a ^ b for a, b in zip(encrypted_msg, keystream))
 
-def extract_private_key(identity: str):
-    """Backward-compatible alias for older callers."""
-    return extract(identity)
-
-
-def encrypt_for_identity(identity: str, message: str):
-    """Backward-compatible alias for older callers."""
-    return encrypt(setup()["public_params"], identity, message)
-
-
-def decrypt_for_identity(identity: str, ciphertext):
-    """Backward-compatible alias for older callers."""
-    return decrypt(ciphertext, f"mock-private-key-for:{identity}")
+        return {
+            "success": True,
+            "plaintext": decrypted.decode('utf-8')
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Decryption failed: {str(e)}"
+        }

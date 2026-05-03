@@ -1,8 +1,7 @@
 from __future__ import annotations
-
-from flask import Flask, request
+import os
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
-
 from config import Config
 from database import close_db, init_db
 from routes.auth_routes import auth_bp
@@ -10,29 +9,22 @@ from routes.ibe_routes import ibe_bp
 from request_security import validate_request_timestamp
 from api_response import error_response, success_response
 
-
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
     CORS(app)
-
     app.register_blueprint(auth_bp)
     app.register_blueprint(ibe_bp)
-
     app.teardown_appcontext(close_db)
-
     with app.app_context():
         init_db()
 
     @app.before_request
     def enforce_request_timestamp():
-        # A narrow timestamp window provides a basic replay defense without
-        # requiring a full nonce store or server-side challenge system.
-        # Browser CORS preflight requests do not carry application payloads,
-        # so they are exempt from this check to keep frontend integration working.
         if request.method == "OPTIONS":
             return None
-
+        if request.path == "/" or request.path == "/favicon.ico":
+            return None
         raw_timestamp = request.headers.get("X-Request-Timestamp")
         error_message = validate_request_timestamp(raw_timestamp)
         if error_message is not None:
@@ -55,14 +47,11 @@ def create_app() -> Flask:
         return error_response("Internal server error.", 500)
 
     @app.get("/")
-    def health_check():
-        return success_response({"message": "IBE backend is running."})
+    def serve_frontend():
+        return send_from_directory(os.path.dirname(__file__), "index.html")
 
     return app
 
-
 app = create_app()
-
-
 if __name__ == "__main__":
     app.run(debug=True)

@@ -28,16 +28,14 @@ def validate_request_timestamp(raw_timestamp: str | None) -> str | None:
 
     return None
 
-
 def validate_json_payload(payload, required_fields: tuple[str, ...]) -> tuple[dict | None, str | None]:
     """Validate that a decoded JSON body exists and contains required fields."""
-
     if not isinstance(payload, dict):
         return None, "Request body must be valid JSON."
-
     for field in required_fields:
         value = payload.get(field)
-        if not isinstance(value, str) or not value.strip():
+        if value is None:
             return None, f"{field} is required."
-
+        if isinstance(value, str) and not value.strip():
+            return None, f"{field} is required."
     return payload, None

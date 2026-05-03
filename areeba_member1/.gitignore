@@ -11,3 +11,5 @@ env/
 
 # OS junk
 .DS_Store
+
+*.sqlite3
