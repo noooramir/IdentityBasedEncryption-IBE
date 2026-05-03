@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 # file name : dfd_tmt_blueprint_only.md
 
-=======
->>>>>>> 8562e32eecf0e222a9024a7f667a977b7b12262a
 # DFD/TMT Blueprint Only (Member 1)
 
 Use this file to build the diagram in Microsoft Threat Modeling Tool.
